@@ -1,151 +1,260 @@
+globals [
+  actual-flood-height
+  start-flood?
+  start-evacuate?
+  rise-count
+  ]
+
 turtles-own [
-  local_stratergy
-  reset_level
-  clock
-  window_local
-  seeing
-  shifting
-]
-to set-up
-  ca
+  target
+  temp-target
+  on-target?
+  another-target
+  another-target-distance
+  despair-index  
+  ]
 
-  reset-ticks
-  crt  Population-of-butterflies[
-    set clock  random clock-length
-    if stratergy ="delay"[set local_stratergy "delay"]
-    if stratergy ="advance"[set local_stratergy "advance"]
-    if stratergy = "mix"
-    [ifelse ( 0 = random 2)[set local_stratergy  "delay"][set local_stratergy  "advance"]]
+patches-own [
+  alt
+  water?
+  ]
 
-    if stratergy = "both"[
-      ifelse ( clock <  ( threshold + (window * clock-length)))[
-        set local_stratergy  "delay"][
-      set local_stratergy  "advance"]
+
+to setup
+  clear-all                             ;deleates all
+  set-default-shape turtles "person"    ;the shape of the turtles - person
+  ask patches [ set water? false ]      ;at the start, all patches are set to not be water
+  create-coast                          ;it launches procedures ...
+  create-water
+  color-coast  
+  color-water
+  add-people
+  set rise-count 1                      ;setup rise-count to 1                  
+  reset-ticks                           ;resets time
+end
+
+
+to create-coast  ;it creates the coast
+  ask n-of number-of-hills-before-diffuse patches [ if pxcor > 30 [ set alt 1 ] ]          ;randomly select the number of patches (as much as we set the variable) and se their height to 1 (the part where is the water is omitted)
+  repeat 400 [ diffuse alt 0.2 ]           ;400 repeats the command diffuse alt 0.2, thereby patches transmit part of its height surrounding patches and creates a real landscape with a gradual height, constant 400 and 0.2 I have chosen based on practical experience
+  scale-coast                                              ;because the diffuse wors only between 0 and 1, it is necessary to rescale the height range 0-1000 
+  ask patches [ if pxcor <= 15 [ set alt 0 ] ]          ; height of patches is set to 0, where the water will be later
+end
+
+
+to create-water   ;it create the water
+  ask patches [ if alt < 100 and pxcor <= 50 [ set water? true ] ]  ;for the first 50 patches with height under 100 on the x sets the variable water to true
+  ask patches [ if water? = true [ set alt -1 ] ]  ; patches with variable water = true sets the height - 1, for another rescale
+  scale-coast-final ;final coast scale
+end
+
+
+to scale-coast 
+  let low [alt] of min-one-of patches [alt]   ;low - the lowest height of the patch  
+  let high [alt] of max-one-of patches [alt]  ;high - the highest height of the patch   
+  let range high - low                        ;range = disctinction between high and low                    
+
+  ask patches [                    ;rescale by the range to 0-1000
+    set alt alt - low                  
+    set alt alt * 1000 / range         
+    ]
+end
+
+
+to scale-coast-final ;rescale the final coast by the range 
+  let xlow [alt] of min-one-of (patches with [water? != true]) [alt]  ;xlow - the lowest height of the patch   
+  let xhigh [alt] of max-one-of (patches with [water? != true]) [alt] ;high - the highest height of the patch    
+  let xrange xhigh - xlow                                             ;range = disctinction between high and low  
+
+  ask patches [ 
+    if water? != true [
+      set alt alt - xlow                   
+      set alt alt * 1000 / xrange          
+      ]
+    ]
+end
+
+
+to color-coast ; color patches by its height
+  ask patches [ if alt >= 0 and alt < 050 [ set pcolor 51] ]
+  ask patches [ if alt >= 050 and alt < 100 [ set pcolor 52] ]
+  ask patches [ if alt >= 100 and alt < 150 [ set pcolor 53] ]
+  ask patches [ if alt >= 150 and alt < 200 [ set pcolor 54] ]
+  ask patches [ if alt >= 200 and alt < 250 [ set pcolor 55] ]
+  ask patches [ if alt >= 250 and alt < 300 [ set pcolor 56] ]
+  ask patches [ if alt >= 300 and alt < 350 [ set pcolor 57] ]
+  ask patches [ if alt >= 350 and alt < 400 [ set pcolor 47] ]
+  ask patches [ if alt >= 400 and alt < 450 [ set pcolor 46] ]
+  ask patches [ if alt >= 450 and alt < 500 [ set pcolor 45] ]
+  ask patches [ if alt >= 500 and alt < 550 [ set pcolor 44] ]
+  ask patches [ if alt >= 550 and alt < 600 [ set pcolor 43] ]
+  ask patches [ if alt >= 600 and alt < 650 [ set pcolor 42] ]
+  ask patches [ if alt >= 650 and alt < 700 [ set pcolor 36] ]
+  ask patches [ if alt >= 700 and alt < 750 [ set pcolor 35] ]
+  ask patches [ if alt >= 750 and alt < 800 [ set pcolor 34] ]
+  ask patches [ if alt >= 800 and alt < 850 [ set pcolor 33] ]
+  ask patches [ if alt >= 850 and alt < 900 [ set pcolor 32] ]
+  ask patches [ if alt >= 900 and alt < 950 [ set pcolor 31] ]
+  ask patches [ if alt >= 950 and alt <= 1000 [ set pcolor 30] ] 
+end
+
+to color-water ;color everything what is water to 104 blue
+  ask patches [ if water? = true [ set pcolor 104 ] ] 
+end
+
+
+to add-people
+  ask n-of number-of-people (patches with [water? != true]) ;the required number of people is born on the land and their properties are set
+    [ sprout 1 [ set on-target? false 
+                 set color orange
+                 set despair-index 0 ] 
+    ] 
+end
+
+
+to move ;ensures the movement of people before the start of the floods, randomly turns left and right, if it is not pointed at the wall and into the water they move, otherwise they turns
+  ask turtles [
+    rt random 50
+    lt random 50
+    ifelse patch-ahead 1 != nobody 
+      [ ifelse [water?] of patch-ahead 1 = true
+        [ lt random-float 360 ]
+        [ fd 1 ] 
+      ]
+      [ lt random-float 360 ]
+    ] 
+end
+
+
+to start-flood-and-evacuate ;starts the flood and the evacuation
+  set start-flood? true ;launch the flood
+  set start-evacuate? true ;launch the evacuation 
+end
+
+
+to water_rise ; increase the flood height
+  ask patches [ 
+    if water? = true and alt < max-flood-height [ ;if the patch is water and it has lower height than the maximum one its surroundings its flooded, with respect of the border patches
+      if pycor < 160 [
+        ask patch-at-heading-and-distance 0 1 [ if alt < actual-flood-height + flood-height-step [ set water? true ] ] 
+        ] 
+      if pxcor < 160 [
+        ask patch-at-heading-and-distance 90 1 [ if alt < actual-flood-height + flood-height-step  [ set water? true ] ] 
+        ]
+      if pycor > 0 [
+        ask patch-at-heading-and-distance 180 1 [ if alt < actual-flood-height + flood-height-step  [ set water? true ] ] 
+        ]    
+      if pxcor > 0 [
+        ask patch-at-heading-and-distance 270 1 [ if alt < actual-flood-height + flood-height-step  [ set water? true ] ] 
+        ]
+      ] 
+  ]
+   
+  if ticks / rise-speed = rise-count [ ;increase of the height of the flood it will be done when its run by rise-speed
+    ifelse actual-flood-height + flood-height-step < max-flood-height ;actual height can not be higher than the maximum one
+      [ set actual-flood-height actual-flood-height + flood-height-step 
+        set rise-count rise-count + 1   
+        ]
+      [ set actual-flood-height max-flood-height
+        set rise-count rise-count + 1                
+        ]
     ]
 
-  setxy random-xcor random-ycor
-  set shape "butterfly"
-
-
-
-    ifelse (local_stratergy = "delay" )  ; is local stratergy delay or advance
-    [
-
-     set window_local  -1
-     set reset_level threshold
-    ][
-
-      set reset_level 0
-    set window_local  ( threshold + (window * clock-length))] ; setiing window to any point about threshold dpending upon the size of window
-
-
-    set-color
-  ]
+   color-water ; color the water
 end
+
+
+to evacuate
+  
+    
+  ask turtles [
+    
+    ask self [ if water? = true [ die ] ] ; if person is drowning, he's diyng
+    
+    if despair-index >= max-despair-index  ; if the despair index reach its maximum, the turtle stop looking for the target and stays on the place where it is 
+      [ set on-target? true
+        set color red ]       
+    
+    ifelse target = 0 and on-target? = false ; the turtle doesn't have a target and it is not standing on it
+      [ if any? patches in-radius visibility with-max [alt] [ set target max-one-of patches in-radius visibility [alt] ] ; the turtle will pick up in the visibility radius patch with the heighest altitude and set it as its target
+        ] 
+      [ set another-target max-one-of patches in-radius visibility [alt] ;the turtle already has a target and its looking for the better one, on the way
+        set another-target-distance distance another-target 
+        if another-target-distance < 20 [ set target another-target ]    ;if there is better target closer and higher, the turtle will chose the new one        
+        ]
+    
+    ifelse distance target <= 1 and on-target? = false  ;the turtle is near the target
+      [ if count turtles-on target < 1 ; there are no other turtles 
+          [ move-to target ]  ; go there
+          set on-target? true  ; set turtle as on the target, althrough it is only near
+        ]
+      [ 
+        face target ;turn face to the target
+        if on-target? = false 
+        [ ifelse is-patch? patch-ahead 1 and count turtles-on patch-ahead 1 < 1 and [water?] of patch-ahead 1 != true   ;it the way is clear and there is no water
+            [ move-to patch-here ; move to the center of the patch and make a step
+              fd 1 
+              ]             
+            [ set temp-target one-of (neighbors with [water? != true])  ; in the case that the turtle can not make the movement to the target, it will chose random neighbor patch and if it is possible it will move there
+              set despair-index despair-index + 1 ;the index of the despair will increase
+              if is-patch? temp-target and count turtles-on temp-target < 1
+                [ face temp-target
+                  fd 1
+                  ]
+              ]
+          ]
+       ]
+    ]    
+ 
+        
+end
+
+
 
 to go
-
-
-
-
- ask turtles[
-
- if (stratergy = "both" )[
-      ifelse ( clock <  ( threshold + (window * clock-length)))[
-        set local_stratergy  "delay"][
-      set local_stratergy  "advance"]
-    ]
-
-    ifelse (0 = random 2) ; randmly choose whether to go right or left
-  [
-
-
-
-   rt random 90][
-      lt random 90]
-    forward 1                     ; move
-    set clock ((clock + 1) mod clock-length ) ; incrimenting clock
-    ifelse (( clock >= threshold ) and (clock > window_local))  ;; see if this condition is true
-        [set seeing  "true"
-          see][set seeing  "false"]
-
-
-    set-color  ;; set whether it will light or not
-
-  ]
-  tick
-end
-
-to see
-  ifelse count turtles in-radius 2 with [ color = yellow] >= flashes-to-reset
-  [
-    set shifting "true"
-    set clock reset_level
-  ][set shifting "false"]
-end
-
-to set-color
-  ifelse clock < threshold
-  [
-    show-turtle
-    set color yellow
-  ][
-      set color grey
-    ifelse show-dark-fireflies[
-    show-turtle][
-    hide-turtle]
-  ]
+        
+  ifelse start-flood? = true and start-evacuate? = true 
+    [ water_rise 
+      evacuate
+      tick ]
+    [ move ]
+  
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+314
 10
-647
-448
+968
+685
 -1
 -1
-13.0
+4.0
 1
-10
+5
 1
 1
 1
 0
+0
+0
 1
-1
-1
--16
-16
--16
-16
+0
+160
+0
+160
 0
 0
 1
 ticks
 30.0
 
-SLIDER
-14
-14
-199
-47
-Population-of-butterflies
-Population-of-butterflies
-0
-1000
-829.0
-1
-1
-NIL
-HORIZONTAL
-
 BUTTON
-13
-56
-80
-89
+198
+29
+300
+98
 NIL
-set-up\n
+setup
 NIL
 1
 T
@@ -157,10 +266,10 @@ NIL
 1
 
 BUTTON
-124
-59
-187
-92
+10
+340
+133
+409
 NIL
 go
 T
@@ -174,184 +283,270 @@ NIL
 1
 
 SLIDER
-13
-103
-185
-136
-window
-window
+7
+118
+191
+151
+max-flood-height
+max-flood-height
 0
+1000
+500
 1
-0.32
-00.01
 1
 NIL
 HORIZONTAL
 
 SLIDER
-14
-152
+7
+153
+191
 186
-185
-clock-length
-clock-length
-0
-10
-10.0
+flood-height-step
+flood-height-step
+1
+100
+20
 1
 1
 NIL
 HORIZONTAL
 
+MONITOR
+206
+117
+301
+162
+actual_flood_hight
+actual-flood-height
+2
+1
+11
+
 SLIDER
-16
-196
+7
 188
-229
-threshold
-threshold
+191
+221
+rise-speed
+rise-speed
 1
+10
+1
+1
+1
+(max speed=1)
+HORIZONTAL
+
+SLIDER
 5
-1.0
+64
+190
+97
+number-of-people
+number-of-people
+1
+3000
+1000
 1
 1
 NIL
 HORIZONTAL
 
-SWITCH
-19
-243
-177
-276
-show-dark-fireflies
-show-dark-fireflies
-1
-1
--1000
-
-MONITOR
-810
-30
-905
-75
-advance count
-count turtles with [local_stratergy = \"advance\"]
-17
-1
-11
-
-MONITOR
-961
+TEXTBOX
+8
+13
+158
 31
-1054
-76
-delay count
-count turtles with [local_stratergy = \"delay\"]
+World creation parameters:
+11
+0.0
+1
+
+SLIDER
+5
+29
+189
+62
+number-of-hills-before-diffuse
+number-of-hills-before-diffuse
+100
+500
+400
+10
+1
+NIL
+HORIZONTAL
+
+TEXTBOX
+9
+104
+159
+122
+Flood parameters:
+11
+0.0
+1
+
+TEXTBOX
+11
+325
+161
+343
+Simulation control center:
+11
+0.0
+1
+
+BUTTON
+178
+341
+302
+410
+start flood & evacuate
+start-flood-and-evacuate
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+10
+246
+192
+279
+visibility
+visibility
+1
+160
+50
+1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+208
+236
+302
+281
+people in safe
+count turtles
 17
 1
 11
 
 SLIDER
-14
-288
-186
-321
-flashes-to-reset
-flashes-to-reset
-1
 10
-3.0
+281
+192
+314
+max-despair-index
+max-despair-index
+0
+50
+20
 1
 1
 NIL
 HORIZONTAL
+
+MONITOR
+207
+283
+303
+328
+dead people
+number-of-people - count turtles
+17
+1
+11
+
+TEXTBOX
+10
+231
+160
+249
+People parameters:
+11
+0.0
+1
 
 PLOT
-689
-82
-1173
-321
-Flashing
+10
+432
+305
+582
+% dead people
 NIL
 NIL
 0.0
-10.0
+100.0
 0.0
-2000.0
+100.0
 true
 false
-"set-plot-y-range 0 population-of-butterflies" ""
+"" ""
 PENS
-"default" 1.0 0 -16777216 true "" "plot count turtles with [color = yellow ]"
-
-CHOOSER
-33
-344
-171
-389
-Stratergy
-Stratergy
-"mix" "delay" "advance" "both"
-3
-
-MONITOR
-814
-339
-902
-384
-shifting
-count turtles with [shifting =\"true\"]
-17
-1
-11
-
-MONITOR
-977
-340
-1057
-385
-seeing
-count turtles with [seeing =\"true\"]
-17
-1
-11
+"default" 1.0 0 -2674135 true "" "plot (number-of-people - count turtles) / number-of-people * 100"
 
 @#$#@#$#@
 ## WHAT IS IT?
 
-(a general understanding of what the model is trying to show or explain)
+This project simulates the process of evacuation of people living on the coast during the coming flood.
 
-## HOW IT WORKS
+## DESCRIPTION OF THE MODEL
 
-(what rules the agents use to create the overall behavior of the model)
+####Buttons
+Actual flood height - actual-flood-height represents the height of the current water level
+Start flood - start-flood? boolean variable, which will starts the flood coming to the ashore
+Start evacuate - start-evacuate? boolean variable, which will alarm citizens and launch the evacuation of the people
+Rise count - rise-count auxiliary variable for rise-speed, to determine after how many tick the water level increase by the step
+Low - low is auxiliary variable in the procedure scale-coast
+High - high is auxiliary variable in the procedure scale-coast
+Range - range is auxiliary variable in the procedure scale-coast
+Xlow - xlow is auxiliary variable for procedure scale-coast-final
+Xhigh - xhigh is auxiliary variable for procedure scale-coast-final
+Xrange - xrange is auxiliary variable for procedure scale-coast-final
 
-## HOW TO USE IT
+#####Terrain creation:
+Number of hills before diffuse - number-of-hills-before-diffuse is global variable which determines how many hills before diffuse will be generated at the start of the simulation
+Number of people - number-of-people is global variable which determines how many people will be generated at the start of the simulation
 
-(how to use the model, including a description of each of the items in the Interface tab)
+#####Flood parameters:
+Maximal flood height - max-flood-height is global variable which determines maximal height of the flood
+Flood height step - flood-height-step is global variable which determines height of the step, which the flood will make
+Rise speed - rise-speed is global variable which determines the speed of the rise of the water level. Every flood step will start in the second, when there is the multiple of the tick and the rise speed. 1 represents the maximal speed
 
-## THINGS TO NOTICE
+#####People parameters:
+Visibility - visibility is global variable determines how far can people (turtles) see, they use it by looking for the highest situated place because of the rescue.
+Maximal despair index - max-despair-index represents global variable, where the failed attempts are load by looking for the target (the highest situated place). If the index reaches its maximum value, people stop looking for that place.
 
-(suggested things for the user to notice while running the model)
+#####Variables of turtles (people)
+Target - target is the goal patch, where the turtle after looking around want go. It is the highest point within its visibility.
+On-target - on-target? - boolean variable, which tells if the turtle reach its goal patch
+Another target - another-target - it is patch, substitute goal, which turtle is looking for during the way to the to target. In case of need, can use this goal instead of the previous target.
+Another target distance - another-target-distance represents the distance from the turtle to another target
+Despair index- despair-index represents failed attempts on the way to target
+Temp target - temp-target is used, if the turtle can not reach the original way in some reason
 
-## THINGS TO TRY
+#####Variables of patches
+Alt - alt represents altitude, how hight the patches are
+Water - water? is boolean variable, which tells us if its water or not
 
-(suggested things for the user to try to do (move sliders, switches, etc.) with the model)
 
-## EXTENDING THE MODEL
+## HOW DOES THE SIMULATION WORKS
 
-(suggested things to add or change in the Code tab to make the model more complicated, detailed, accurate, etc.)
-
-## NETLOGO FEATURES
-
-(interesting or unusual features of NetLogo that the model uses, particularly in the Code tab; or where workarounds were needed for missing features)
-
-## RELATED MODELS
-
-(models in the NetLogo Models Library and elsewhere which are of related interest)
-
-## CREDITS AND REFERENCES
-
-(a reference to the model's URL on the web if it has one, as well as any other necessary credits, citations, and links)
+At the beginnings, there is need to setup the whole world, where the simulation will run. Therefore there are the World creation parameters. In the first slider "number-of-hills-before-diffuse" there can be set the number of actual hills from 100 to 500. In the second slider "number-of-people" there can be the number of actual population set. It could be from the 1 to 3000 citizens.
+There is also need to setup the flood parameters. There could be maximum flood height setup from 0 to 1000 and flood height step from 1 to 100. You can also setup the rise-speed from 1 to 10. Global variable rise speed works backwards it means, if you setup the rise speed as 1 the speed will be actually maximal. Rise speed = 2, 2 ticks = 1 step.
+We can also set the people parameters. How far can people see tells the visibility, which is set to 50 by default. The highest visibility means the biggest chance to find the highest place, but it means the possibility of the longer way there. Despair index is set to 20 by default. So the people can have 20 difficulties, it means the bigger chance to live, but it means the longer time with looking for the way. It is directly proportional to the number of generated people.
+By the pressing the Go button the world starts living. People will randomly move and when the start flood & evacuate button is pressed, water start rising and people starts evacuate.
+For the new simulation stop the Go button and press the Setup button.
 @#$#@#$#@
 default
 true
@@ -545,22 +740,6 @@ Polygon -7500403 true true 135 105 90 60 45 45 75 105 135 135
 Polygon -7500403 true true 165 105 165 135 225 105 255 45 210 60
 Polygon -7500403 true true 135 90 120 45 150 15 180 45 165 90
 
-sheep
-false
-15
-Circle -1 true true 203 65 88
-Circle -1 true true 70 65 162
-Circle -1 true true 150 105 120
-Polygon -7500403 true false 218 120 240 165 255 165 278 120
-Circle -7500403 true false 214 72 67
-Rectangle -1 true true 164 223 179 298
-Polygon -1 true true 45 285 30 285 30 240 15 195 45 210
-Circle -1 true true 3 83 150
-Rectangle -1 true true 65 221 80 296
-Polygon -1 true true 195 285 210 285 210 240 240 210 195 210
-Polygon -7500403 true false 276 85 285 105 302 99 294 83
-Polygon -7500403 true false 219 85 210 105 193 99 201 83
-
 square
 false
 0
@@ -645,20 +824,14 @@ Line -7500403 true 40 84 269 221
 Line -7500403 true 40 216 269 79
 Line -7500403 true 84 40 221 269
 
-wolf
-false
-0
-Polygon -16777216 true false 253 133 245 131 245 133
-Polygon -7500403 true true 2 194 13 197 30 191 38 193 38 205 20 226 20 257 27 265 38 266 40 260 31 253 31 230 60 206 68 198 75 209 66 228 65 243 82 261 84 268 100 267 103 261 77 239 79 231 100 207 98 196 119 201 143 202 160 195 166 210 172 213 173 238 167 251 160 248 154 265 169 264 178 247 186 240 198 260 200 271 217 271 219 262 207 258 195 230 192 198 210 184 227 164 242 144 259 145 284 151 277 141 293 140 299 134 297 127 273 119 270 105
-Polygon -7500403 true true -1 195 14 180 36 166 40 153 53 140 82 131 134 133 159 126 188 115 227 108 236 102 238 98 268 86 269 92 281 87 269 103 269 113
-
 x
 false
 0
 Polygon -7500403 true true 270 75 225 30 30 225 75 270
 Polygon -7500403 true true 30 75 75 30 270 225 225 270
+
 @#$#@#$#@
-NetLogo 6.2.0
+NetLogo 5.1.0
 @#$#@#$#@
 @#$#@#$#@
 @#$#@#$#@
@@ -674,6 +847,7 @@ true
 0
 Line -7500403 true 150 150 90 180
 Line -7500403 true 150 150 210 180
+
 @#$#@#$#@
 0
 @#$#@#$#@
